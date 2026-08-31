@@ -3,48 +3,72 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin - Assam Job Alert</title>
+  <title>Admin Dashboard - Job Management</title>
   <style>
-    body { font-family: Arial, sans-serif; background: #eef2f5; padding: 20px; }
-    .form-box { max-width: 450px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    label { font-weight: bold; display: block; margin-top: 10px; }
-    input, textarea, button { width: 100%; margin-top: 5px; padding: 10px; box-sizing: border-box; }
-    button { background: #003366; color: white; border: none; font-weight: bold; cursor: pointer; margin-top: 15px; }
+    body { font-family: Arial, sans-serif; background: #f0f2f5; padding: 20px; max-width: 800px; margin: auto; }
+    .box { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+    input, textarea, button { width: 100%; margin-top: 8px; padding: 10px; box-sizing: border-box; }
+    button { background: #003366; color: white; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; }
+    .btn-danger { background: #d9534f; margin-top: 5px; }
+    .btn-edit { background: #f0ad4e; margin-top: 5px; }
+    .job-item { border-bottom: 1px solid #ccc; padding: 10px 0; }
   </style>
 </head>
 <body>
-  <div class="form-box">
-    <h2>Add Job Alert</h2>
-    <label>Admin Secret Password</label>
+
+  <div class="box">
+    <h2 id="form-title">Add New Job Alert</h2>
+    <label>Secret Password</label>
     <input type="password" id="secretKey" placeholder="Password" required>
-    <hr>
-    <label>Job Title</label>
-    <input type="text" id="jobTitle" placeholder="Job Title" required>
-    <label>Posting Date</label>
-    <input type="date" id="date" required>
-    <label>About Job</label>
-    <textarea id="aboutJob" placeholder="Details" required></textarea>
-    <label>Requirements</label>
-    <textarea id="requirements" placeholder="Eligibility" required></textarea>
-    <label>Last Date</label>
-    <input type="date" id="lastDate" required>
-    <label>Apply Link</label>
-    <input type="url" id="applyLink" placeholder="https://..." required>
     
-    <button onclick="postJob()">Publish Job</button>
+    <input type="hidden" id="rowIndex">
+    <input type="text" id="jobTitle" placeholder="Job Title">
+    <input type="date" id="date">
+    <textarea id="aboutJob" placeholder="About Job"></textarea>
+    <textarea id="requirements" placeholder="Requirements"></textarea>
+    <input type="date" id="lastDate">
+    <input type="url" id="applyLink" placeholder="Apply Link">
+    
+    <button id="submitBtn" onclick="saveJob()">Publish Job</button>
     <p id="msg"></p>
   </div>
 
+  <div class="box">
+    <h2>Manage Posted Jobs</h2>
+    <div id="job-list">Loading jobs...</div>
+  </div>
+
   <script>
-    // Iss string ki jagah apna Google Web App URL paste karein
-    const API_URL = "https://script.google.com/macros/s/AKfycbyZnkUKP0lJ5cCN4B968GmvHHigAfMjuxJwGQH1WPqFgCBpYZpfLwWVyiiMuAY0DdoC-g/exec";
+    const API_URL = "https://script.google.com/macros/s/AKfycbyZnkUKP0lJ5cCN4B968GmvHHigAfMjuxJwGQH1WPqFgCBpYZpfLwWVyiiMuAY0DdoC-g/exec"; // Web App URL Replace Karein
 
-    function postJob() {
-      const msg = document.getElementById("msg");
-      msg.innerText = "Posting job...";
+    function loadJobs() {
+      fetch(API_URL)
+        .then(res => res.json())
+        .then(data => {
+          const list = document.getElementById("job-list");
+          list.innerHTML = "";
+          data.forEach(job => {
+            const item = document.createElement("div");
+            item.className = "job-item";
+            item.innerHTML = `
+              <strong>${job["Job Title"]}</strong> (${job["Date"]})
+              <button class="btn-edit" onclick='editSetup(${JSON.stringify(job)})'>Edit</button>
+              <button class="btn-danger" onclick="deleteJob(${job.rowIndex})">Delete</button>
+            `;
+            list.appendChild(item);
+          });
+        });
+    }
 
-      const jobData = {
-        secretKey: document.getElementById("secretKey").value,
+    function saveJob() {
+      const secretKey = document.getElementById("secretKey").value;
+      const rowIndex = document.getElementById("rowIndex").value;
+      const action = rowIndex ? "edit" : "add";
+
+      const payload = {
+        action: action,
+        secretKey: secretKey,
+        rowIndex: parseInt(rowIndex),
         jobTitle: document.getElementById("jobTitle").value,
         date: document.getElementById("date").value,
         aboutJob: document.getElementById("aboutJob").value,
@@ -53,22 +77,52 @@
         applyLink: document.getElementById("applyLink").value
       };
 
+      document.getElementById("msg").innerText = "Processing...";
+
+      fetch(API_URL, { method: "POST", body: JSON.stringify(payload) })
+        .then(res => res.json())
+        .then(res => {
+          document.getElementById("msg").innerText = res.message || res.status;
+          resetForm();
+          loadJobs();
+        });
+    }
+
+    function deleteJob(rowIndex) {
+      const secretKey = prompt("Confirm Delete - Enter Secret Password:");
+      if (!secretKey) return;
+
       fetch(API_URL, {
         method: "POST",
-        body: JSON.stringify(jobData)
+        body: JSON.stringify({ action: "delete", secretKey: secretKey, rowIndex: rowIndex })
       })
       .then(res => res.json())
       .then(res => {
-        if(res.status === "Success") {
-          msg.style.color = "green";
-          msg.innerText = "Job successfully posted!";
-          document.querySelectorAll("input:not(#secretKey), textarea").forEach(i => i.value = "");
-        } else {
-          msg.style.color = "red";
-          msg.innerText = "Wrong Password!";
-        }
+        alert(res.message || res.status);
+        loadJobs();
       });
     }
+
+    function editSetup(job) {
+      document.getElementById("form-title").innerText = "Edit Job Alert";
+      document.getElementById("rowIndex").value = job.rowIndex;
+      document.getElementById("jobTitle").value = job["Job Title"];
+      document.getElementById("date").value = job["Date"];
+      document.getElementById("aboutJob").value = job["About Job"];
+      document.getElementById("requirements").value = job["Requirements"];
+      document.getElementById("lastDate").value = job["Last Date"];
+      document.getElementById("applyLink").value = job["Apply Link"];
+      document.getElementById("submitBtn").innerText = "Update Job";
+    }
+
+    function resetForm() {
+      document.getElementById("form-title").innerText = "Add New Job Alert";
+      document.getElementById("rowIndex").value = "";
+      document.querySelectorAll("input:not(#secretKey), textarea").forEach(i => i.value = "");
+      document.getElementById("submitBtn").innerText = "Publish Job";
+    }
+
+    loadJobs();
   </script>
 </body>
 </html>
